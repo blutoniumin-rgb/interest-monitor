@@ -57,6 +57,7 @@ export type Feed = {
   deals: DealDTO[];
   notifications: NotificationDTO[];
   unread: number;
+  totals: { mine: number; partner: number; all: number };
 };
 
 export type DealDetail = { deal: DealDTO; offers: OfferDTO[] };

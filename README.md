@@ -46,3 +46,12 @@ Built with Next.js 15, Neon Postgres, Drizzle ORM, Tailwind CSS v4 and Framer Mo
 | `npm run db:generate` | Create a new migration after editing `src/db/schema.ts` |
 | `npm run db:migrate` | Apply migrations to Neon |
 | `npm run db:studio` | Browse the database |
+
+## Deploy on Vercel
+
+1. Push this repo to GitHub and import it at [vercel.com/new](https://vercel.com/new). Framework preset is Next.js; no extra build settings.
+2. In the project’s Environment Variables, add the same two values as `.env`:
+   - `DATABASE_URL` — the Neon **pooled** connection string
+   - `SESSION_SECRET` — a long random string (`openssl rand -base64 32`)
+3. Apply migrations once against that database (`npm run db:migrate`) before the first visit. Vercel does not run them on deploy.
+4. Deploy. Cookies are marked secure in production, so sign-in works on the `https` URL Vercel gives you.
