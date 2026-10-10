@@ -40,14 +40,24 @@ function feedQueries(userId: string) {
       .select({ unread: count() })
       .from(notifications)
       .where(and(eq(notifications.userId, userId), eq(notifications.read, false))),
+    db()
+      .select({
+        creatorId: deals.creatorId,
+        kisses: sql<number>`coalesce(sum(${deals.currentOffer}), 0)::int`,
+      })
+      .from(deals)
+      .where(and(eq(deals.nestId, nestId), eq(deals.status, "sealed")))
+      .groupBy(deals.creatorId),
   ] as const;
 }
 
 const runFeed = (userId: string) => db().batch(feedQueries(userId));
 type FeedRows = Awaited<ReturnType<typeof runFeed>>;
 
-function toFeed([[me], [nest], members, dealRows, notes, [{ unread }]]: FeedRows): Feed | null {
+function toFeed([[me], [nest], members, dealRows, notes, [{ unread }], earned]: FeedRows): Feed | null {
   if (!me) return null;
+  const mineEarned = Number(earned.find((row) => row.creatorId === me.id)?.kisses ?? 0);
+  const partnerEarned = earned.reduce((sum, row) => sum + (row.creatorId === me.id ? 0 : Number(row.kisses)), 0);
   return {
     me: { id: me.id, name: me.name, kissBalance: me.kissBalance },
     partner: (() => {
@@ -65,6 +75,7 @@ function toFeed([[me], [nest], members, dealRows, notes, [{ unread }]]: FeedRows
       createdAt: n.createdAt.toISOString(),
     })),
     unread,
+    totals: { mine: mineEarned, partner: partnerEarned, all: mineEarned + partnerEarned },
   };
 }
 

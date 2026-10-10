@@ -298,7 +298,7 @@ function ActionPanel({
           <div>
             <p className="headline text-[1.6rem]">Sealed with a kiss</p>
             <p className="text-sm text-mute">
-              {iEarn ? `${partnerName} owes you ${currentOffer} interest` : `You owe ${partnerName} ${currentOffer} interest`}
+              {iEarn ? `You get ${currentOffer} kisses from ${partnerName}` : `You give ${partnerName} ${currentOffer} kisses`}
             </p>
           </div>
         </div>

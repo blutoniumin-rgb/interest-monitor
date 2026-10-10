@@ -84,7 +84,7 @@ export const offers = pgTable(
   (t) => [index("offers_deal_idx").on(t.dealId, t.createdAt)],
 );
 
-export const NOTIFICATION_TYPES = ["new_deal", "counter", "sealed", "declined", "joined"] as const;
+export const NOTIFICATION_TYPES = ["new_deal", "counter", "sealed", "declined", "joined", "settled"] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
 export const notifications = pgTable(

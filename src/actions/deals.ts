@@ -113,10 +113,12 @@ export async function acceptDeal(dealId: string): Promise<DealResult> {
     ), earn as (
       update users set kiss_balance = users.kiss_balance + sealed.current_offer
       from sealed where users.id = sealed.creator_id
+      returning users.id
     ), give as (
       update users set kiss_balance = users.kiss_balance - sealed.current_offer
       from sealed
       where users.nest_id = sealed.nest_id and users.id <> sealed.creator_id
+      returning users.id
     ), t as (
       update nests set total_kisses = nests.total_kisses + sealed.current_offer
       from sealed where nests.id = sealed.nest_id
@@ -161,6 +163,45 @@ export async function declineDeal(dealId: string): Promise<DealResult> {
 
   if (rows.length === 0) return { error: "This deal can't be declined right now." };
   return { ok: true, dealId };
+}
+
+export type SettleResult = { error: string } | { ok: true; settled: number; mine: number; theirs: number };
+
+/**
+ * The person who is owed kisses collects them back. Moves both balances toward zero by `count`
+ * (clamped to what is actually owed) in one statement. The row lock keeps rapid taps from overshooting.
+ */
+export async function settleKisses(count: number): Promise<SettleResult> {
+  if (!Number.isInteger(count) || count < 1 || count > 100_000) return { error: "Nothing to settle." };
+  const c = await requireCouple();
+  if (!c) return NO_COUPLE;
+
+  const prefix = `${c.userName} settled `;
+  const { rows } = await db().execute<{ amt: number; mine: number; theirs: number }>(sql`
+    with s as (
+      select id, least(${count}::int, kiss_balance) as amt
+      from users
+      where id = ${c.userId}::uuid and kiss_balance > 0
+      for update
+    ), earn as (
+      update users set kiss_balance = users.kiss_balance - s.amt
+      from s where users.id = s.id
+      returning users.kiss_balance as bal
+    ), give as (
+      update users set kiss_balance = users.kiss_balance + s.amt
+      from s where users.id = ${c.partnerId}::uuid
+      returning users.kiss_balance as bal
+    ), n as (
+      insert into notifications (user_id, type, message)
+      select ${c.partnerId}::uuid, 'settled',
+        ${prefix}::text || s.amt || case when s.amt = 1 then ' kiss' else ' kisses' end
+      from s
+    )
+    select s.amt, (select bal from earn) as mine, (select bal from give) as theirs from s`);
+
+  if (rows.length === 0) return { error: "Nobody owes you any kisses right now." };
+  const r = rows[0];
+  return { ok: true, settled: Number(r.amt), mine: Number(r.mine), theirs: Number(r.theirs) };
 }
 
 export async function markNotificationsRead() {

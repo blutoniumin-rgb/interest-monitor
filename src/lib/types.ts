@@ -6,16 +6,18 @@ export const MAX_KISSES = 999;
 
 export type Person = { id: string; name: string; kissBalance: number };
 
-/** Positive balance means your love owes you kisses. Negative means you owe them. */
+/** Positive balance: kisses coming to you. Negative: kisses you still have to give. */
 export function kissSide(balance: number) {
-  return { amount: Math.abs(balance), label: balance < 0 ? "interest owed" : "interest won" };
+  if (balance < 0) return { amount: -balance, label: "to give" };
+  if (balance > 0) return { amount: balance, label: "to get" };
+  return { amount: 0, label: "all even" };
 }
 
-/** One cute line that sums up where the couple stands, from my point of view. */
+/** One plain line that sums up where the couple stands, from my point of view. */
 export function standing(me: number, partnerName: string) {
-  if (me > 0) return `${partnerName} owes you ${me} interest`;
-  if (me < 0) return `You owe ${partnerName} ${-me} interest`;
-  return "All squared up. Time for a new deal?";
+  if (me > 0) return `You get ${me} kisses from ${partnerName}`;
+  if (me < 0) return `You give ${-me} kisses to ${partnerName}`;
+  return "All even. Time for a new deal?";
 }
 
 export type DealDTO = {

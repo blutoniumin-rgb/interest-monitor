@@ -1,8 +1,9 @@
 "use client";
 
-import { motion, useAnimationControls } from "framer-motion";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion, useAnimationControls } from "framer-motion";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { logout } from "@/actions/auth";
+import { settleKisses } from "@/actions/deals";
 import { Avatar } from "@/components/Avatar";
 import { Bell } from "@/components/Bell";
 import { Chips } from "@/components/Chips";
@@ -12,6 +13,7 @@ import { DealCard } from "@/components/DealCard";
 import { HeartBurst } from "@/components/HeartBurst";
 import { HeartIcon, LipsIcon, LogoutIcon, PlusIcon } from "@/components/Icons";
 import { NewDealSheet } from "@/components/NewDealSheet";
+import { SettleButton } from "@/components/SettleButton";
 import { isMyTurn, kissSide, standing, type Feed, type Person } from "@/lib/types";
 import { useFeed } from "@/lib/useFeed";
 
@@ -19,9 +21,58 @@ const FILTERS = ["all", "turn", "bargaining", "sealed"] as const;
 type Filter = (typeof FILTERS)[number];
 
 export function HomeScreen({ initialFeed }: { initialFeed: Feed }) {
-  const { data = initialFeed } = useFeed(initialFeed);
+  const { data = initialFeed, mutate } = useFeed(initialFeed);
   const { me, partner, deals } = data;
-  const mine = me.kissBalance;
+
+  // Kisses settled on this device that the server has not confirmed yet. They are applied on top of the
+  // feed so the numbers move instantly and a background refresh can't make them jump back.
+  const [local, setLocal] = useState(0);
+  const localRef = useRef(0);
+  const queued = useRef(0);
+  const inflight = useRef(false);
+  const serverMine = useRef(me.kissBalance);
+  serverMine.current = me.kissBalance;
+  const mine = me.kissBalance - local;
+  const myCard = { ...me, kissBalance: mine };
+  const partnerCard = partner ? { ...partner, kissBalance: partner.kissBalance + local } : null;
+
+  /** Settles up to `count` kisses locally and returns how many actually moved. */
+  const settleLocal = useCallback((count: number) => {
+    const n = Math.min(count, serverMine.current - localRef.current);
+    if (n <= 0) return 0;
+    localRef.current += n;
+    queued.current += n;
+    setLocal(localRef.current);
+    return n;
+  }, []);
+
+  const flush = useCallback(async () => {
+    if (inflight.current || queued.current === 0) return;
+    const n = queued.current;
+    queued.current = 0;
+    inflight.current = true;
+    try {
+      const res = await settleKisses(n);
+      if ("ok" in res) {
+        await mutate(
+          (cur) =>
+            cur && cur.partner
+              ? { ...cur, me: { ...cur.me, kissBalance: res.mine }, partner: { ...cur.partner, kissBalance: res.theirs } }
+              : cur,
+          { revalidate: false },
+        );
+      } else {
+        await mutate();
+      }
+    } catch {
+      await mutate();
+    } finally {
+      localRef.current -= n;
+      setLocal(localRef.current);
+      inflight.current = false;
+      if (queued.current > 0) void flush();
+    }
+  }, [mutate]);
   const [filter, setFilter] = useState<Filter>("all");
   const [direction, setDirection] = useState(0);
 
@@ -72,14 +123,6 @@ export function HomeScreen({ initialFeed }: { initialFeed: Feed }) {
             <Avatar name={me.name} />
             {partner && <Avatar name={partner.name} />}
           </div>
-          <motion.button
-            whileTap={{ scale: 0.88 }}
-            onClick={() => setSheetOpen(true)}
-            aria-label="New Kiss Deal"
-            className="glass flex h-11 w-11 items-center justify-center rounded-full"
-          >
-            <PlusIcon size={20} />
-          </motion.button>
         </div>
         <div className="flex items-center gap-2">
           <form action={logout}>
@@ -98,13 +141,18 @@ export function HomeScreen({ initialFeed }: { initialFeed: Feed }) {
         <div className="relative mt-4">
           <HeartBurst trigger={burst} count={26} />
           <motion.div animate={pulse} className="grid grid-cols-2 gap-3 pt-2">
-            <BalanceCard person={me} you />
-            <BalanceCard person={partner} />
+            <BalanceCard person={myCard} you />
+            <BalanceCard person={partnerCard} />
           </motion.div>
           <p className="mx-auto mt-4 flex w-fit max-w-full items-center justify-center gap-1.5 rounded-full bg-white/20 px-4 py-1.5 text-center text-[13px] font-bold">
             <HeartIcon size={13} className="shrink-0 text-rose" />
             <span>{standing(mine, partner?.name ?? "Your love")}</span>
           </p>
+          <AnimatePresence>
+            {mine > 0 && partner && (
+              <SettleButton key="settle" owed={mine} partnerName={partner.name} onSettle={settleLocal} onDone={flush} />
+            )}
+          </AnimatePresence>
         </div>
       </section>
 

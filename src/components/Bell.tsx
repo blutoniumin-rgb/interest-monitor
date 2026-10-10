@@ -56,6 +56,7 @@ export function NotificationIcon({ type }: { type: NotificationDTO["type"] }) {
     sealed: { bg: "bg-sky", icon: <CheckIcon size={18} /> },
     declined: { bg: "bg-mute", icon: <CloseIcon size={18} /> },
     joined: { bg: "bg-rose", icon: <HeartIcon size={18} /> },
+    settled: { bg: "bg-rose", icon: <LipsIcon size={18} /> },
   } as const;
   const { bg, icon } = map[type];
   return <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white ${bg}`}>{icon}</span>;
